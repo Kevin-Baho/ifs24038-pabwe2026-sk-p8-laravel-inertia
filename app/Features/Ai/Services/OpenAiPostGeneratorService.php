@@ -21,9 +21,28 @@ class OpenAiPostGeneratorService implements AiClientInterface
         ?string $apiKey = null,
         ?string $model = null,
     ) {
-        $this->baseUrl = $baseUrl ?: (string) (config('openai.endpoint') ?: 'https://api.groq.com/openai/v1');
         $this->apiKey = $apiKey ?: (string) (env('OPENAI_KEY') ?? config('openai.key', ''));
-        $this->model = $model ?: (string) (env('OPENAI_MODEL') ?: 'openai/gpt-oss-20b');
+        $isGroqKey = str_starts_with($this->apiKey, 'gsk_');
+
+        if ($baseUrl !== null && $baseUrl !== '') {
+            $this->baseUrl = $baseUrl;
+        } elseif (env('OPENAI_ENDPOINT')) {
+            $this->baseUrl = (string) env('OPENAI_ENDPOINT');
+        } elseif ($isGroqKey) {
+            $this->baseUrl = 'https://api.groq.com/openai/v1';
+        } else {
+            $this->baseUrl = (string) (config('openai.endpoint') ?: 'https://api.openai.com/v1');
+        }
+
+        if ($model !== null && $model !== '') {
+            $this->model = $model;
+        } elseif (env('OPENAI_MODEL')) {
+            $this->model = (string) env('OPENAI_MODEL');
+        } elseif ($isGroqKey) {
+            $this->model = 'openai/gpt-oss-20b';
+        } else {
+            $this->model = (string) (config('openai.model') ?: 'gpt-4o-mini');
+        }
     }
 
     public function generatePosts(string $topic, int $count = 1, ?string $category = null): array
@@ -82,7 +101,7 @@ class OpenAiPostGeneratorService implements AiClientInterface
 
         if (! $response->successful()) {
             $message = $response->json('error.message') ?? "status {$response->status()}";
-            throw new RuntimeException("Groq API Error: {$message}");
+            throw new RuntimeException("AI API Error: {$message}");
         }
 
         $rawContent = $response->json('choices.0.message.content');

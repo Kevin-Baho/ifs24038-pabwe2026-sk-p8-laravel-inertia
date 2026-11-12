@@ -1,47 +1,66 @@
-# Multi-stage build untuk BlogVerse Pro (FrankenPHP)
-FROM dunglas/frankenphp:1-php8.4
+# ==============================================================================
+# Dockerfile.vercel — BlogVerse Pro (FrankenPHP, non-worker mode)
+# ==============================================================================
+# FrankenPHP mode: CGI klasik per-request (BUKAN worker mode)
+# Worker mode membutuhkan frankenphp_handle_request() di PHP script,
+# yang tidak dimiliki public/index.php Laravel standar.
+# ==============================================================================
+
+FROM dunglas/frankenphp:1-php8.4-bookworm
 
 # Set working directory
 WORKDIR /app
 
-# 1. SALIN SELURUH PROYEK TERLEBIH DAHULU (Agar file artisan dan composer ada di /app)
-COPY . /app
-
-# 2. Install system dependencies & PHP extensions yang dibutuhkan
+# Install PHP extensions yang dibutuhkan
 RUN install-php-extensions \
     pdo_mysql \
-    pdo_pgsql \
-    pgsql \
     gd \
     zip \
     intl \
     opcache \
     bcmath
 
-# 3. Install Composer
+# Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 4. Jalankan composer install (sekarang file artisan sudah ada, jadi package:discover tidak akan error)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install Node.js (LTS) untuk build frontend assets
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 5. Install Node.js untuk build frontend assets
-RUN apt-get update && apt-get install -y nodejs npm
-RUN npm install
-RUN npm run build
+# Salin seluruh proyek
+COPY . /app
 
-# 6. Optimasi Laravel untuk Production
-RUN php artisan view:cache
-RUN php artisan event:cache
+# Install Composer dependencies (production, optimized)
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-progress
 
-# 7. Set permission untuk storage dan bootstrap cache
-RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
-RUN chmod -R 775 /app/storage /app/bootstrap/cache
+# Install npm dependencies dan build frontend assets
+RUN npm ci && npm run build
 
-# FrankenPHP environment variables
-ENV SERVER_NAME=":80"
-ENV FRANKENPHP_CONFIG="worker ./public/index.php"
+# Build-time cache: HANYA view & event (TIDAK config:cache, TIDAK migrate)
+RUN php artisan view:cache || true
+RUN php artisan event:cache || true
+
+# Set permission untuk storage dan bootstrap cache
+RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache \
+    && chmod -R 775 /app/storage /app/bootstrap/cache
+
+# Salin Caddyfile kita (menimpa default FrankenPHP)
+COPY Caddyfile /etc/caddy/Caddyfile
+
+# PENTING: JANGAN set FRANKENPHP_CONFIG="worker ..."
+# ENV itu yang mengaktifkan worker mode dan menyebabkan error:
+# "worker public/index.php has not reached frankenphp_handle_request()"
+ENV PORT=80
+ENV APP_ENV=production
 
 EXPOSE 80
 
-# Jalankan FrankenPHP
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+# Jalankan FrankenPHP dengan Caddyfile kita (CGI mode, bukan worker mode)
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

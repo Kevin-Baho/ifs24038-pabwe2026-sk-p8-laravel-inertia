@@ -1,13 +1,20 @@
 {
+    # frankenphp WITHOUT "worker" subdirective = CGI mode (non-worker)
+    # Jangan tambahkan: frankenphp { worker ./public/index.php }
+    # karena public/index.php Laravel tidak memanggil frankenphp_handle_request()
     frankenphp
     order php_server before file_server
 }
 
 :{$PORT:80} {
     root * /app/public
+
+    # Kompresi response
     encode zstd gzip
 
-    php_server {
-        try_files {path} /index.php?{query}
-    }
+    # php_server sudah menangani:
+    # - try_files: coba file statis dulu, fallback ke /index.php
+    # - file_server: untuk aset statis (CSS, JS, gambar)
+    # - PHP execution: untuk file .php
+    php_server
 }

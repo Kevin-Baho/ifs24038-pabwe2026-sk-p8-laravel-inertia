@@ -452,6 +452,38 @@ Lakukan verifikasi berikut setelah deploy berhasil:
 
 ## 11. Troubleshooting
 
+### ⚠️ Error: "worker has not reached frankenphp_handle_request()" + exit code 1
+
+**Ini adalah error paling umum saat pertama deploy.** Ada DUA penyebab yang saling terkait:
+
+**Penyebab A — `FRANKENPHP_CONFIG="worker ..."` di Dockerfile (penyebab utama)**
+
+Jika ada baris berikut di Dockerfile.vercel atau di environment variable Vercel:
+```
+ENV FRANKENPHP_CONFIG="worker ./public/index.php"
+```
+Hapus baris itu. Baris ini mengaktifkan worker mode yang tidak kompatibel dengan
+`public/index.php` Laravel standar (yang tidak memanggil `frankenphp_handle_request()`).
+
+Pastikan Dockerfile.vercel yang digunakan adalah versi terbaru dari repository ini.
+
+**Penyebab B — Migrasi belum dijalankan (sesi database gagal)**
+
+Stack trace berakhir di `Session\Store::readFromHandler()` artinya tabel `sessions`
+belum ada. Jalankan migrasi:
+
+```bash
+# Buat .env.production sementara dengan kredensial database online
+php artisan migrate --force --env=production
+```
+
+Setelah kedua hal ini diperbaiki, lakukan redeploy:
+```bash
+vercel deploy --prod
+```
+
+---
+
 ### Error: "No application encryption key has been specified"
 **Solusi:** Pastikan `APP_KEY` sudah diisi di Vercel env vars.
 ```bash
@@ -464,6 +496,12 @@ php artisan key:generate --show
 - Periksa nilai `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`
 - Pastikan SSL diaktifkan untuk TiDB Cloud
 - Coba koneksi dari lokal dengan `.env.production` untuk debugging
+
+### Error: "SQLSTATE[42S02]: Table 'db.sessions' doesn't exist"
+**Solusi:** Migrasi belum dijalankan ke database online.
+```bash
+php artisan migrate --force --env=production
+```
 
 ### Error: "Class not found" atau Autoload issues
 **Solusi:**
