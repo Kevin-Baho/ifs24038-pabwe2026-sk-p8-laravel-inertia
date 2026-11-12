@@ -1,7 +1,13 @@
 # Multi-stage build untuk BlogVerse Pro (FrankenPHP)
 FROM dunglas/frankenphp:1-php8.4
 
-# Install system dependencies & PHP extensions yang dibutuhkan
+# Set working directory
+WORKDIR /app
+
+# 1. SALIN SELURUH PROYEK TERLEBIH DAHULU (Agar file artisan dan composer ada di /app)
+COPY . /app
+
+# 2. Install system dependencies & PHP extensions yang dibutuhkan
 RUN install-php-extensions \
     pdo_mysql \
     pdo_pgsql \
@@ -12,31 +18,22 @@ RUN install-php-extensions \
     opcache \
     bcmath
 
-# Set working directory
-WORKDIR /app
-
-# Copy composer files terlebih dahulu untuk caching layer
-COPY composer.json composer.lock ./
-
-# Install Composer
+# 3. Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Install PHP dependencies tanpa dev dependencies
+# 4. Jalankan composer install (sekarang file artisan sudah ada, jadi package:discover tidak akan error)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Copy seluruh file proyek ke container
-COPY . /app
-
-# Install Node.js untuk build frontend assets
+# 5. Install Node.js untuk build frontend assets
 RUN apt-get update && apt-get install -y nodejs npm
 RUN npm install
 RUN npm run build
 
-# Optimasi Laravel untuk Production (View & Event Cache)
+# 6. Optimasi Laravel untuk Production
 RUN php artisan view:cache
 RUN php artisan event:cache
 
-# Set permission untuk storage dan bootstrap cache
+# 7. Set permission untuk storage dan bootstrap cache
 RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
 RUN chmod -R 775 /app/storage /app/bootstrap/cache
 
