@@ -17,4 +17,25 @@ export default defineConfig({
             ignored: ['**/storage/framework/views/**'],
         },
     },
+    build: {
+        target: 'es2020',
+        cssMinify: true,
+        minify: 'esbuild',
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (id.includes('@toast-ui')) {
+                        return 'editor';
+                    }
+                    if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+                        return 'vendor-react';
+                    }
+                    if (id.includes('node_modules/@inertiajs/')) {
+                        return 'vendor-inertia';
+                    }
+                },
+            },
+        },
+        chunkSizeWarningLimit: 1000,
+    },
 });

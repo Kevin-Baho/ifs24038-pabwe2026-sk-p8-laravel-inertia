@@ -8,7 +8,11 @@ export default function ArticleCard({ post, featured = false }) {
             <Link href={`/articles/${post.slug}`} className="block overflow-hidden rounded-xl bg-slate-100">
                 {post.cover_url ? (
                     <img
-                        src={post.cover_url} alt="" loading="lazy"
+                        src={post.cover_url}
+                        alt={post.title}
+                        loading={featured ? 'eager' : 'lazy'}
+                        fetchPriority={featured ? 'high' : 'auto'}
+                        decoding="async"
                         className={`w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${featured ? 'aspect-[16/9]' : 'aspect-[16/10]'}`}
                     />
                 ) : (

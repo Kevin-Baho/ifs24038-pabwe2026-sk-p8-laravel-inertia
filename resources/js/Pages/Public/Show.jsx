@@ -11,7 +11,7 @@ export default function PublicShow({ post, related }) {
     return (
         <AppLayout variant="public">
             <Head title={post.title}>
-                {post.excerpt && <meta name="description" content={post.excerpt} />}
+                <meta name="description" content={post.excerpt || `${post.title} - Baca artikel selengkapnya di BlogVerse Pro.`} />
             </Head>
 
             <article className="mx-auto max-w-3xl px-4 sm:px-6 pt-10 sm:pt-14">
@@ -30,7 +30,16 @@ export default function PublicShow({ post, related }) {
                     </div>
                 </div>
 
-                {post.cover_url && <img src={post.cover_url} alt="" className="mt-10 w-full rounded-2xl object-cover max-h-[28rem]" />}
+                {post.cover_url && (
+                    <img
+                        src={post.cover_url}
+                        alt={post.title}
+                        loading="eager"
+                        fetchPriority="high"
+                        decoding="async"
+                        className="mt-10 w-full rounded-2xl object-cover max-h-[28rem]"
+                    />
+                )}
 
                 <div className="mt-10">
                     <MarkdownViewer content={post.content} />

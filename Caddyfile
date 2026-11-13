@@ -12,6 +12,12 @@
     # Kompresi response
     encode zstd gzip
 
+    # Cache static assets dari Vite build (hashed names) & favicon
+    @static {
+        path /build/* /favicon.svg /robots.txt
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
     # php_server sudah menangani:
     # - try_files: coba file statis dulu, fallback ke /index.php
     # - file_server: untuk aset statis (CSS, JS, gambar)
