@@ -12,6 +12,11 @@
     # Kompresi response
     encode zstd gzip
 
+    # Header SEO agar mesin pencari selalu diizinkan merayap
+    header {
+        X-Robots-Tag "index, follow"
+    }
+
     # Cache static assets dari Vite build (hashed names) & favicon
     @static {
         path /build/* /favicon.svg /robots.txt
