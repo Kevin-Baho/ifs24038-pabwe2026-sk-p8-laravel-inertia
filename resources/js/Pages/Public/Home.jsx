@@ -11,6 +11,8 @@ export default function Home({ latest, categories }) {
             <Head title="Beranda" />
 
             <div className="mx-auto max-w-6xl px-4 sm:px-6">
+                <h1 className="sr-only">BlogVerse Pro - Beranda Utama</h1>
+
                 {/* Berita utama + indeks rubrik */}
                 <section className="pt-10 sm:pt-14 grid gap-10 lg:grid-cols-[1fr_17rem]">
                     <div>
@@ -18,7 +20,7 @@ export default function Home({ latest, categories }) {
                             <ArticleCard post={lead} featured />
                         ) : (
                             <div className="rounded-2xl bg-white border border-slate-200 p-10">
-                                <h1 className="font-serif text-4xl font-semibold tracking-tight text-ink">Halaman pertama masih kosong.</h1>
+                                <h2 className="font-serif text-4xl font-semibold tracking-tight text-ink">Halaman pertama masih kosong.</h2>
                                 <p className="mt-3 max-w-lg text-slate-600">Belum ada artikel yang terbit. Jadilah penulis pertama di BlogVerse Pro.</p>
                                 <Link href="/register" className="mt-6 inline-flex px-5 py-3 rounded-xl bg-primary-600 text-white font-semibold hover:bg-primary-700">Daftar sebagai penulis</Link>
                             </div>

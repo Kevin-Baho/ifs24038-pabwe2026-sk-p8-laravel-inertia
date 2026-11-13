@@ -20,9 +20,9 @@ export default function ArticleCard({ post, featured = false }) {
 
             <div className="mt-4 flex flex-col gap-2.5 flex-1">
                 <div><CategoryBadge category={post.category} badge={post.category_badge} /></div>
-                <h3 className={`font-serif font-semibold tracking-tight text-ink group-hover:text-primary-700 transition-colors ${featured ? 'text-3xl sm:text-4xl leading-tight' : 'text-xl leading-snug'}`}>
+                <h2 className={`font-serif font-semibold tracking-tight text-ink group-hover:text-primary-700 transition-colors ${featured ? 'text-3xl sm:text-4xl leading-tight' : 'text-xl leading-snug'}`}>
                     <Link href={`/articles/${post.slug}`}>{post.title}</Link>
-                </h3>
+                </h2>
                 {post.excerpt && <p className={`text-slate-600 ${featured ? 'text-lg line-clamp-3' : 'text-sm line-clamp-3'}`}>{post.excerpt}</p>}
 
                 <div className="mt-auto pt-2 flex items-center gap-3 text-xs text-slate-500">
