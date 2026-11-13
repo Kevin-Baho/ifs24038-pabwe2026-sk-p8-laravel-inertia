@@ -60,7 +60,12 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA') ?: (function () {
+                PDO::MYSQL_ATTR_SSL_CA => (function () {
+                    $caPath = env('MYSQL_ATTR_SSL_CA');
+                    if (! empty($caPath) && $caPath !== '<CA_PATH>' && file_exists($caPath)) {
+                        return $caPath;
+                    }
+
                     $caContent = env('MYSQL_ATTR_SSL_CA_CONTENT');
                     if (! empty($caContent)) {
                         $tempPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mysql-ca.pem';
@@ -69,9 +74,14 @@ return [
                         }
                         return $tempPath;
                     }
+
+                    if (file_exists('/etc/ssl/certs/ca-certificates.crt')) {
+                        return '/etc/ssl/certs/ca-certificates.crt';
+                    }
+
                     return null;
                 })(),
-                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT', true),
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => filter_var(env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT', false), FILTER_VALIDATE_BOOLEAN),
             ], fn ($v) => $v !== null && $v !== '') : [],
         ],
 
