@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Features\Post\Models\Post;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -66,6 +68,7 @@ class AdminTest extends TestCase
             $response = $this->actingAs($admin)->get($url);
             $response->assertOk();
             $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+            $this->assertNotEmpty($response->streamedContent());
         }
     }
 
@@ -125,5 +128,54 @@ class AdminTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['id' => $writer->id]);
         $this->assertDatabaseCount('posts', 0);
+    }
+
+    // ── NEW TESTS FOR MISSING COVERAGE ──────────────────────────────────────
+
+    /** Covers AdminUserService::getUsersList() with non-empty search query */
+    public function test_admin_can_search_users_by_name(): void
+    {
+        $admin = User::factory()->admin()->create(['name' => 'Admin Boss']);
+        User::factory()->create(['name' => 'John Doe', 'username' => 'johndoe']);
+        User::factory()->create(['name' => 'Jane Smith', 'username' => 'janesmith']);
+
+        $this->actingAs($admin)
+            ->get('/admin/users?search=john')
+            ->assertOk()
+            ->assertInertia(fn (Assert $p) => $p
+                ->component('Admin/Users')
+                ->has('users.data', 1)
+                ->where('users.data.0.username', 'johndoe')
+            );
+    }
+
+    /** Covers AdminUserService::deleteUser() – deletes cover images and profile photo */
+    public function test_deleting_user_removes_cover_images_and_profile_photo(): void
+    {
+        $disk = config('filesystems.media_disk', 'public');
+        Storage::fake($disk);
+
+        $admin = User::factory()->admin()->create();
+        $writer = User::factory()->create([
+            'profile_photo_path' => 'avatars/writer-avatar.jpg',
+        ]);
+
+        // Fake the profile photo file
+        Storage::disk($disk)->put('avatars/writer-avatar.jpg', 'fake-avatar');
+
+        // Create a post with a cover image
+        $coverPath = 'post-covers/cover-image.jpg';
+        Storage::disk($disk)->put($coverPath, 'fake-cover');
+        Post::factory()->create([
+            'user_id' => $writer->id,
+            'cover_image_path' => $coverPath,
+        ]);
+
+        $this->actingAs($admin)->delete("/admin/users/{$writer->id}")->assertRedirect(route('admin.users'));
+
+        $this->assertDatabaseMissing('users', ['id' => $writer->id]);
+        $this->assertDatabaseCount('posts', 0);
+        Storage::disk($disk)->assertMissing($coverPath);
+        Storage::disk($disk)->assertMissing('avatars/writer-avatar.jpg');
     }
 }

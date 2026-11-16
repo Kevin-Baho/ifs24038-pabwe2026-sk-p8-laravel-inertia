@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Features\Ai\DTO\GeneratedPostItem;
 use App\Features\Ai\Services\OpenAiPostGeneratorService;
+use App\Features\Post\Enums\PostCategory;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
@@ -29,13 +30,34 @@ class OpenAiPostGeneratorTest extends TestCase
         $service1 = new OpenAiPostGeneratorService('https://custom.api/v1', 'custom-key', 'custom-model');
         $this->assertInstanceOf(OpenAiPostGeneratorService::class, $service1);
 
-        // 2. Groq key detection
+        // 2. Groq key detection when env is cleared
+        $oldEndpoint = getenv('OPENAI_ENDPOINT');
+        $oldModel = getenv('OPENAI_MODEL');
+        putenv('OPENAI_ENDPOINT');
+        putenv('OPENAI_MODEL');
+        unset($_ENV['OPENAI_ENDPOINT'], $_SERVER['OPENAI_ENDPOINT'], $_ENV['OPENAI_MODEL'], $_SERVER['OPENAI_MODEL']);
+
         $service2 = new OpenAiPostGeneratorService(null, 'gsk_test123', null);
         $this->assertInstanceOf(OpenAiPostGeneratorService::class, $service2);
 
-        // 3. Fallback default
-        $service3 = new OpenAiPostGeneratorService(null, 'sk-openai', null);
+        // 3. Fallback default (non-groq key) when env is cleared
+        $service3 = new OpenAiPostGeneratorService('', 'sk-openai', '');
         $this->assertInstanceOf(OpenAiPostGeneratorService::class, $service3);
+
+        // 4. Default constructor without arguments
+        $service4 = new OpenAiPostGeneratorService();
+        $this->assertInstanceOf(OpenAiPostGeneratorService::class, $service4);
+
+        if ($oldEndpoint !== false) {
+            putenv("OPENAI_ENDPOINT={$oldEndpoint}");
+            $_ENV['OPENAI_ENDPOINT'] = $oldEndpoint;
+            $_SERVER['OPENAI_ENDPOINT'] = $oldEndpoint;
+        }
+        if ($oldModel !== false) {
+            putenv("OPENAI_MODEL={$oldModel}");
+            $_ENV['OPENAI_MODEL'] = $oldModel;
+            $_SERVER['OPENAI_MODEL'] = $oldModel;
+        }
     }
 
     public function test_generate_posts_validates_empty_topic_and_missing_key(): void
@@ -135,6 +157,33 @@ class OpenAiPostGeneratorTest extends TestCase
         // Invalid JSON string
         $this->expectException(RuntimeException::class);
         $service->parseContent('bukan_json_valid');
+    }
+
+    public function test_parse_content_skips_invalid_items_and_handles_null_excerpt(): void
+    {
+        $service = new OpenAiPostGeneratorService('https://api.openai.com/v1', 'test-key', 'gpt-4');
+
+        $payload = json_encode([
+            'posts' => [
+                'not-an-array',
+                ['title' => '', 'content' => 'Has content but no title'],
+                ['title' => 'Has title but no content', 'content' => ''],
+                [
+                    'title' => 'Valid Title',
+                    'category' => null,
+                    'excerpt' => '', // blank excerpt -> becomes null
+                    'content' => 'Valid Content Body',
+                ],
+            ],
+        ]);
+
+        $items = $service->parseContent($payload, null); // $fixedCategory = null
+
+        $this->assertCount(1, $items);
+        $this->assertSame('Valid Title', $items[0]->title);
+        $this->assertSame(PostCategory::UMUM->value, $items[0]->category);
+        $this->assertNull($items[0]->excerpt);
+        $this->assertSame('Valid Content Body', $items[0]->content);
     }
 
     public function test_parse_content_throws_when_no_valid_posts(): void

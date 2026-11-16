@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Features\Ai\Contracts\AiClientInterface;
 use App\Features\Ai\DTO\GeneratedPostItem;
 use App\Features\Post\Models\Post;
+use App\Features\Post\Services\PostExcelService;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class MemberPostTest extends TestCase
@@ -143,6 +145,8 @@ class MemberPostTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('spreadsheetml', $response->headers->get('content-type'));
+        $content = $response->streamedContent();
+        $this->assertNotEmpty($content);
     }
 
     public function test_ai_generate_flashes_items_and_save_creates_drafts(): void
@@ -172,5 +176,226 @@ class MemberPostTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->post('/dashboard/posts/ai-generate', ['topic' => 'Apa saja', 'count' => 99])
             ->assertSessionHasErrors('count');
+    }
+
+    // ── NEW TESTS FOR MISSING COVERAGE ──────────────────────────────────────
+
+    /** Covers PostController::show() – owner sees own published post */
+    public function test_owner_can_view_own_post_detail(): void
+    {
+        $me = User::factory()->create();
+        $post = Post::factory()->published()->create(['user_id' => $me->id]);
+
+        $this->actingAs($me)
+            ->get("/dashboard/posts/{$post->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $p) => $p
+                ->component('Post/Show')
+                ->where('post.slug', $post->slug)
+                ->where('publicUrl', route('articles.show', $post->slug))
+            );
+    }
+
+    /** Covers PostController::show() – draft post, publicUrl = null */
+    public function test_owner_can_view_draft_post_detail_with_null_public_url(): void
+    {
+        $me = User::factory()->create();
+        $post = Post::factory()->draft()->create(['user_id' => $me->id]);
+
+        $this->actingAs($me)
+            ->get("/dashboard/posts/{$post->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $p) => $p
+                ->component('Post/Show')
+                ->where('publicUrl', null)
+            );
+    }
+
+    /** Covers PostController::index() – ?edit={id} when post belongs to user (Gate allows) */
+    public function test_index_with_edit_query_param_returns_editing_post(): void
+    {
+        $me = User::factory()->create();
+        $post = Post::factory()->draft()->create(['user_id' => $me->id]);
+
+        $this->actingAs($me)
+            ->get("/dashboard/posts?edit={$post->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $p) => $p
+                ->component('Post/Index')
+                ->where('editing.id', $post->id)
+            );
+    }
+
+    /** Covers PostController::index() – ?edit={id} when candidate belongs to other user */
+    public function test_index_with_edit_query_param_of_other_user_post_returns_null_editing(): void
+    {
+        $me = User::factory()->create();
+        $other = Post::factory()->draft()->create(); // belongs to another user
+
+        $this->actingAs($me)
+            ->get("/dashboard/posts?edit={$other->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $p) => $p
+                ->component('Post/Index')
+                ->where('editing', null)
+            );
+    }
+
+    /** Covers PostController::update() – new cover upload replaces old one */
+    public function test_update_post_with_new_cover_replaces_old_cover(): void
+    {
+        $disk = config('filesystems.media_disk', 'public');
+        Storage::fake($disk);
+        $me = User::factory()->create();
+
+        $this->actingAs($me)->post('/dashboard/posts', $this->payload([
+            'cover' => UploadedFile::fake()->image('old.jpg'),
+        ]));
+        $post = Post::firstOrFail();
+        $oldPath = $post->cover_image_path;
+        $this->assertNotNull($oldPath);
+
+        $this->actingAs($me)->put("/dashboard/posts/{$post->id}", $this->payload([
+            'title' => 'Judul Diperbarui',
+            'cover' => UploadedFile::fake()->image('new.jpg'),
+        ]))->assertSessionHasNoErrors();
+
+        $post->refresh();
+        Storage::disk($disk)->assertMissing($oldPath);
+        Storage::disk($disk)->assertExists($post->cover_image_path);
+        $this->assertNotSame($oldPath, $post->cover_image_path);
+    }
+
+    /** Covers PostController::update() – remove_cover flag clears cover */
+    public function test_update_post_with_remove_cover_flag(): void
+    {
+        $disk = config('filesystems.media_disk', 'public');
+        Storage::fake($disk);
+        $me = User::factory()->create();
+
+        $this->actingAs($me)->post('/dashboard/posts', $this->payload([
+            'cover' => UploadedFile::fake()->image('cover.jpg'),
+        ]));
+        $post = Post::firstOrFail();
+        $this->assertNotNull($post->cover_image_path);
+
+        $this->actingAs($me)->put("/dashboard/posts/{$post->id}", $this->payload([
+            'remove_cover' => true,
+        ]))->assertSessionHasNoErrors();
+
+        $post->refresh();
+        $this->assertNull($post->cover_image_path);
+    }
+
+    /** Covers PostController::importExcel() – successful import using export round-trip */
+    public function test_import_excel_creates_posts(): void
+    {
+        $me = User::factory()->create();
+        Post::factory()->published()->create([
+            'user_id' => $me->id,
+            'title' => 'Artikel Untuk Impor',
+            'category' => 'Teknologi',
+        ]);
+
+        $excel = app(PostExcelService::class);
+        $tmpPath = tempnam(sys_get_temp_dir(), 'import_test') . '.xlsx';
+        (new Xlsx($excel->buildSpreadsheet($me->posts()->get())))->save($tmpPath);
+
+        $response = $this->actingAs($me)->post('/dashboard/posts/import', [
+            'importFile' => new UploadedFile(
+                $tmpPath,
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ]);
+
+        @unlink($tmpPath);
+
+        $response->assertSessionHasNoErrors();
+        $response->assertSessionHas('success');
+        $this->assertSame(2, Post::where('user_id', $me->id)->count());
+    }
+
+    /** Covers PostController::importExcel() – skipped rows counted in message */
+    public function test_import_excel_reports_skipped_rows(): void
+    {
+        $me = User::factory()->create();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setCellValue('A1', 'No');
+        $sheet->setCellValue('B1', 'Judul');
+        $sheet->setCellValue('C1', 'Kategori');
+        $sheet->setCellValue('D1', 'Ringkasan');
+        $sheet->setCellValue('E1', 'Konten');
+        $sheet->setCellValue('F1', 'Status');
+        // Valid row
+        $sheet->setCellValue('B2', 'Artikel Valid');
+        $sheet->setCellValue('C2', 'Teknologi');
+        $sheet->setCellValue('E2', 'Konten valid');
+        $sheet->setCellValue('F2', 'Published');
+        // Blank title row (skipped)
+        $sheet->setCellValue('B3', '');
+        $sheet->setCellValue('E3', 'Konten tanpa judul');
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'import_skip') . '.xlsx';
+        (new Xlsx($spreadsheet))->save($tmpPath);
+
+        $response = $this->actingAs($me)->post('/dashboard/posts/import', [
+            'importFile' => new UploadedFile(
+                $tmpPath,
+                'import.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                null,
+                true
+            ),
+        ]);
+
+        @unlink($tmpPath);
+
+        $response->assertSessionHas('success');
+        $this->assertStringContainsString('1 baris dilewati', session('success'));
+    }
+
+    /** Covers PostController::importExcel() – validation fails on wrong mime */
+    public function test_import_excel_validates_file_type(): void
+    {
+        $me = User::factory()->create();
+
+        $this->actingAs($me)->post('/dashboard/posts/import', [
+            'importFile' => UploadedFile::fake()->create('bad.pdf', 100, 'application/pdf'),
+        ])->assertSessionHasErrors('importFile');
+    }
+
+    /** Covers PostController::generateAi() – RuntimeException branch */
+    public function test_generate_ai_runtime_exception_flashes_error(): void
+    {
+        $this->app->bind(AiClientInterface::class, fn () => new class implements AiClientInterface {
+            public function generatePosts(string $topic, int $count = 1, ?string $category = null): array
+            {
+                throw new \RuntimeException('Rate limit exceeded');
+            }
+        });
+
+        $this->actingAs(User::factory()->create())
+            ->post('/dashboard/posts/ai-generate', ['topic' => 'Topik Test', 'count' => 1])
+            ->assertSessionHas('error', 'Gagal menghasilkan draf dengan AI: Rate limit exceeded');
+    }
+
+    /** Covers PostController::generateAi() – generic Throwable branch */
+    public function test_generate_ai_generic_throwable_flashes_service_unavailable(): void
+    {
+        $this->app->bind(AiClientInterface::class, fn () => new class implements AiClientInterface {
+            public function generatePosts(string $topic, int $count = 1, ?string $category = null): array
+            {
+                throw new \Exception('Connection timeout');
+            }
+        });
+
+        $this->actingAs(User::factory()->create())
+            ->post('/dashboard/posts/ai-generate', ['topic' => 'Topik Test', 'count' => 1])
+            ->assertSessionHas('error', 'Layanan AI tidak dapat dihubungi. Coba lagi beberapa saat.');
     }
 }
