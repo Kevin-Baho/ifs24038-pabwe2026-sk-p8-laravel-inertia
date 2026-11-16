@@ -90,6 +90,14 @@ class AdminTest extends TestCase
         putenv('ADMIN_USERNAME=superadmin');
         putenv('ADMIN_PASSWORD=secret123');
         putenv('ADMIN_NAME=Super Admin');
+        $_ENV['ADMIN_EMAIL'] = 'super@blogverse.test';
+        $_ENV['ADMIN_USERNAME'] = 'superadmin';
+        $_ENV['ADMIN_PASSWORD'] = 'secret123';
+        $_ENV['ADMIN_NAME'] = 'Super Admin';
+        $_SERVER['ADMIN_EMAIL'] = 'super@blogverse.test';
+        $_SERVER['ADMIN_USERNAME'] = 'superadmin';
+        $_SERVER['ADMIN_PASSWORD'] = 'secret123';
+        $_SERVER['ADMIN_NAME'] = 'Super Admin';
 
         $this->seed(\Database\Seeders\AdminSeeder::class);
 
@@ -103,6 +111,8 @@ class AdminTest extends TestCase
         putenv('ADMIN_USERNAME');
         putenv('ADMIN_PASSWORD');
         putenv('ADMIN_NAME');
+        unset($_ENV['ADMIN_EMAIL'], $_ENV['ADMIN_USERNAME'], $_ENV['ADMIN_PASSWORD'], $_ENV['ADMIN_NAME']);
+        unset($_SERVER['ADMIN_EMAIL'], $_SERVER['ADMIN_USERNAME'], $_SERVER['ADMIN_PASSWORD'], $_SERVER['ADMIN_NAME']);
     }
 
     public function test_deleting_user_cascades_to_posts(): void

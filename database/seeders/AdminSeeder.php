@@ -14,10 +14,10 @@ class AdminSeeder extends Seeder
      */
     public function run(): void
     {
-        $email = env('ADMIN_EMAIL');
-        $username = env('ADMIN_USERNAME');
-        $password = env('ADMIN_PASSWORD');
-        $name = env('ADMIN_NAME', 'Administrator');
+        $email = getenv('ADMIN_EMAIL') ?: env('ADMIN_EMAIL') ?: ($_ENV['ADMIN_EMAIL'] ?? null);
+        $username = getenv('ADMIN_USERNAME') ?: env('ADMIN_USERNAME') ?: ($_ENV['ADMIN_USERNAME'] ?? null);
+        $password = getenv('ADMIN_PASSWORD') ?: env('ADMIN_PASSWORD') ?: ($_ENV['ADMIN_PASSWORD'] ?? null);
+        $name = getenv('ADMIN_NAME') ?: env('ADMIN_NAME') ?: ($_ENV['ADMIN_NAME'] ?? 'Administrator');
 
         if (empty($email) || empty($username) || empty($password)) {
             $this->command?->warn('ADMIN_EMAIL, ADMIN_USERNAME, atau ADMIN_PASSWORD belum diset di environment. Melewati AdminSeeder.');

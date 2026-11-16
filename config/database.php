@@ -60,7 +60,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => (function () {
+                (defined('Pdo\Mysql::ATTR_SSL_CA') ? \Pdo\Mysql::ATTR_SSL_CA : (defined('PDO::MYSQL_ATTR_SSL_CA') ? PDO::MYSQL_ATTR_SSL_CA : null)) => (function () {
                     $caPath = env('MYSQL_ATTR_SSL_CA');
                     if (! empty($caPath) && $caPath !== '<CA_PATH>' && file_exists($caPath)) {
                         return $caPath;
@@ -81,8 +81,8 @@ return [
 
                     return null;
                 })(),
-                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => filter_var(env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT', false), FILTER_VALIDATE_BOOLEAN),
-            ], fn ($v) => $v !== null && $v !== '') : [],
+                (defined('Pdo\Mysql::ATTR_SSL_VERIFY_SERVER_CERT') ? \Pdo\Mysql::ATTR_SSL_VERIFY_SERVER_CERT : (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT') ? PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT : null)) => filter_var(env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT', false), FILTER_VALIDATE_BOOLEAN),
+            ], fn ($v, $k) => $k !== null && $v !== null && $v !== '', ARRAY_FILTER_USE_BOTH) : [],
         ],
 
         'mariadb' => [
