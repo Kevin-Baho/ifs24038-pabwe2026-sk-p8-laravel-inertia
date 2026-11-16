@@ -21,7 +21,7 @@ class OpenAiPostGeneratorService implements AiClientInterface
         ?string $apiKey = null,
         ?string $model = null,
     ) {
-        $this->apiKey = $apiKey ?: (string) (env('OPENAI_KEY') ?? config('openai.key', ''));
+        $this->apiKey = $apiKey !== null ? $apiKey : (string) (env('OPENAI_KEY') ?? config('openai.key', ''));
         $isGroqKey = str_starts_with($this->apiKey, 'gsk_');
 
         if ($baseUrl !== null && $baseUrl !== '') {
