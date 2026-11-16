@@ -51,7 +51,7 @@ class AppServiceProviderTest extends TestCase
         $provider->boot();
 
         $policy = Gate::getPolicyFor(Post::class);
-        $this->assertSame(PostPolicy::class, $policy);
+        $this->assertInstanceOf(PostPolicy::class, $policy);
     }
 
     public function test_ai_generate_rate_limiter_for_authenticated_user_and_guest(): void
